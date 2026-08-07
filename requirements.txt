@@ -1,0 +1,19 @@
+# Core pipeline (PDF parsing, UMLS RRF parsing, reporting)
+pandas
+pdfplumber
+numpy
+pyarrow
+
+# LLM extraction (Stage 3) — install whichever provider(s) you'll use,
+# set via LLM_PROVIDER env var. python-dotenv lets the API key live in a
+# .env file rather than being re-exported each shell session.
+anthropic
+openai
+python-dotenv
+
+# Advisory embedding suggestions for unverified terms (verify_and_report.py),
+# and the legacy_nmt_embedding_approach/ scripts
+torch
+transformers
+sentence-transformers
+sentencepiece

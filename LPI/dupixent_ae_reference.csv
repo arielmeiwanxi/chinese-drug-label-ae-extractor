@@ -1,0 +1,38 @@
+﻿Chinese Term,Standard English Term,CUI,TTY,Source Section,Confidence / Notes
+结膜炎,Conjunctivitis,C0009763,PT,Adverse Reactions section - Table 3,High
+口腔疱疹,Oral herpes,C0341012,LLT,Adverse Reactions section - Table 3,High
+嗜酸性粒细胞增多,Eosinophilia,C0014457,PT,Adverse Reactions section - Table 3,High
+血管性水肿,Angioedema,C0002994,PT,Adverse Reactions section - Table 3,High
+速发过敏反应,Anaphylactic reaction,C0002792,PT,Adverse Reactions section - Table 3,High
+血清病反应,Serum sickness,C0036830,LLT,Adverse Reactions section - Table 3,High
+血清病样反应,Serum sickness-like reaction,C0221742,LLT,Adverse Reactions section - Table 3,High
+过敏性结膜炎,Allergic conjunctivitis,C0009766,LLT,Adverse Reactions section - Table 3,High
+角膜炎,Keratitis,C0022568,PT,Adverse Reactions section - Table 3,High
+睑缘炎,Blepharitis,C0005741,PT,Adverse Reactions section - Table 3,High
+眼部瘙痒,Eye pruritus,C0022281,LLT,Adverse Reactions section - Table 3,High
+干眼,Dry eye,C0314719,LLT,Adverse Reactions section - Table 3,High
+溃疡性角膜炎,Corneal ulcer,C0010043,LLT,Adverse Reactions section - Table 3,High
+面部皮疹,Rash,C5779628,LLT,Adverse Reactions section - Table 3,"Medium (source text specifies facial rash; MedDRA has no more specific face-only term, so the generic 'Rash' term was used)"
+关节痛,Arthralgia,C0003862,PT,Adverse Reactions section - Table 3,High
+注射部位红斑,Injection site erythema,C0581287,PT,Adverse Reactions section - Table 3,High
+注射部位水肿,Injection site oedema,C0151605,PT,Adverse Reactions section - Table 3,High
+注射部位瘙痒,Injection site pruritus,C0852995,PT,Adverse Reactions section - Table 3,High
+注射部位疼痛,Injection site pain,C0151828,PT,Adverse Reactions section - Table 3,High
+注射部位肿胀,Injection site swelling,C0581289,PT,Adverse Reactions section - Table 3,High
+注射部位淤青,Injection site bruising,C0521508,PT,Adverse Reactions section - Table 3,High
+注射部位硬化,Injection site induration,C0521509,PT,Adverse Reactions section - overview paragraph (COPD-specific),High
+注射部位皮疹,Injection site rash,C0521505,LLT,Adverse Reactions section - overview paragraph (COPD-specific),High (shares the same CUI as the next row)
+注射部位皮炎,Injection site dermatitis,C0521505,PT,Adverse Reactions section - overview paragraph (COPD-specific),High (shares the same CUI as the previous row)
+疱疹性湿疹,Eczema herpeticum,C0936250,LLT,Adverse Reactions section - specific AE descriptions,High
+头痛,Headache,C0018681,PT,"Adverse Reactions section - China patient experience (EFC15116 study only, 2.4%)",High
+超敏反应,Hypersensitivity,C0020517,LLT,Precautions section,High (broad category term; specific subtypes are listed separately as Anaphylactic reaction / Angioedema / Serum sickness)
+嗜酸性肉芽肿性多血管炎(EGPA),Eosinophilic granulomatosis with polyangiitis,C0008728,PT,Precautions section - Eosinophilia increase,High
+嗜酸性粒细胞性肺炎,Eosinophilic pneumonia,C1527407,LLT,Precautions section - Eosinophilia increase,High
+血管炎,Vasculitis,C0042384,LLT,Precautions section - Eosinophilia increase,High
+血管炎性皮疹,Vasculitic rash,C0521161,PT,Precautions section - Eosinophilia increase,High
+视物模糊,Vision blurred,C0344232,LLT,Precautions section - Conjunctivitis/keratitis-related events,"Medium (an associated symptom, not reported as an independent AE)"
+蛲虫病,Enterobiasis,C0086227,PT,Precautions section - Helminth infection,High (case reported in the pediatric asthma development program)
+心血管死亡,Cardiac death,C0376297,LLT,Adverse Reactions section - Cardiovascular,"Medium (MedDRA has no exact entry for ""Cardiovascular death""; used the closest match ""Cardiac death"". Source text lists this as one component of the composite endpoint ""cardiovascular thrombotic events"")"
+非致死性心肌梗死,Myocardial infarction,C0027051,PT,Adverse Reactions section - Cardiovascular,High (component of a composite endpoint)
+非致死性卒中,Cerebrovascular accident,C0038454,PT,Adverse Reactions section - Cardiovascular,High (component of a composite endpoint)
+糖皮质激素戒断症状,Drug withdrawal syndrome,C0152128,PT,Precautions section - Corticosteroids,"Low (a warning about tapering a concomitant corticosteroid, not a direct AE of this drug itself — recommend review on whether to include)"

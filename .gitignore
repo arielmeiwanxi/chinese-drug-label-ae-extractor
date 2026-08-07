@@ -1,0 +1,18 @@
+# UMLS Metathesaurus is a licensed dataset (free UTS account required) that
+# may not be redistributed — users must download their own copy from
+# https://www.nlm.nih.gov/research/umls/ and place the RRF files under umls/
+umls/*.RRF
+umls/*.zip
+
+# output/ holds only generated artifacts (section JSON, the cached UMLS
+# embedding index, the final report). The hand-verified reference extraction
+# lives in LPI/dupixent_ae_reference.csv and IS committed — keeping the two
+# apart means running the pipeline can't overwrite the reviewed data.
+# .gitkeep is tracked so the directory exists when running stages individually.
+output/*
+!output/.gitkeep
+
+.env
+__pycache__/
+*.pyc
+.DS_Store
