@@ -283,7 +283,7 @@ def main():
     findings = [r for r in rows if r["Finding"]]
     print(f"\n-> {out_path}")
     print(f"   {sum(r['Source'] == 'Table' for r in rows)} from the tabulated list, "
-          f"{sum(r['Source'] == 'Narrative' for r in rows)} from the narrative")
+          f"{sum(r['Source'].startswith('Narrative') for r in rows)} from the narrative")
     print(f"   {len(findings)} coding finding(s):")
     for r in findings:
         print(f"     · {r['Term as written']}: {r['Finding']}")
