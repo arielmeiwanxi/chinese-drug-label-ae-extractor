@@ -54,21 +54,45 @@ def to_pt(term, lut):
 
 
 def load_side(path, lut):
-    """Map PT -> {as_written, note}. Terms that cannot be resolved are kept
-    separately: dropping them silently would understate the differences."""
-    resolved, unresolved = {}, []
+    """Map PT -> {as_written, note, source}. Terms that cannot be resolved are
+    kept separately: dropping them silently would understate the differences."""
+    resolved, unresolved, sources = {}, [], set()
     with open(path, encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
             term = pick(row, TERM_COLS)
             if not term:
                 continue
+            src = (row.get("Source") or "").strip()
+            sources.add(src.split()[0] if src else "")
             pt, note = to_pt(term, lut)
             written = pick(row, SOURCE_COLS) or term
             if pt is None:
                 unresolved.append({"as_written": written, "term": term})
             else:
-                resolved.setdefault(pt, {"as_written": written, "note": note})
-    return resolved, unresolved
+                resolved.setdefault(pt, {"as_written": written, "note": note, "source": src})
+    return resolved, unresolved, sources
+
+
+def coverage_warning(ref_sources, loc_sources):
+    """Comparing a fully extracted side against a partially extracted one
+    manufactures differences. A term the other side never had a chance to
+    report is not a discrepancy, so say so rather than letting the counts
+    imply otherwise."""
+    ref_labelled = {s for s in ref_sources if s}
+    loc_labelled = {s for s in loc_sources if s}
+    # An unlabelled side is not an uncovered side. A hand-curated list carries
+    # no Source column but may well cover everything, so comparing coverage
+    # against it would raise a warning that is simply wrong.
+    if not ref_labelled or not loc_labelled:
+        return []
+    ref_only = ref_labelled - loc_labelled
+    loc_only = loc_labelled - ref_labelled
+    msgs = []
+    if ref_only:
+        msgs.append(f"reference covers {', '.join(sorted(ref_only))} sections that the local side does not")
+    if loc_only:
+        msgs.append(f"local covers {', '.join(sorted(loc_only))} sections that the reference does not")
+    return msgs
 
 
 def main():
@@ -78,8 +102,9 @@ def main():
     ref_path, loc_path, index_path, out_path = sys.argv[1:5]
 
     lut = load_lookup(index_path)
-    ref, ref_bad = load_side(ref_path, lut)
-    loc, loc_bad = load_side(loc_path, lut)
+    ref, ref_bad, ref_src = load_side(ref_path, lut)
+    loc, loc_bad, loc_src = load_side(loc_path, lut)
+    warnings = coverage_warning(ref_src, loc_src)
 
     rows = []
     for pt in sorted(set(ref) | set(loc)):
@@ -91,6 +116,7 @@ def main():
             "Reference wording": ref.get(pt, {}).get("as_written", ""),
             "Local wording": loc.get(pt, {}).get("as_written", ""),
             "Note": ref.get(pt, {}).get("note", "") or loc.get(pt, {}).get("note", ""),
+            "Found in": ref.get(pt, {}).get("source", "") or loc.get(pt, {}).get("source", ""),
         })
     for side, bad in (("Reference", ref_bad), ("Local", loc_bad)):
         for b in bad:
@@ -99,6 +125,7 @@ def main():
                 "Reference wording": b["as_written"] if side == "Reference" else "",
                 "Local wording": b["as_written"] if side == "Local" else "",
                 "Note": f"'{b['term']}' not in MedDRA - needs manual coding",
+                "Found in": "",
             })
 
     order = {"In both": 0, "Reference only": 1, "Local only": 2}
@@ -117,6 +144,10 @@ def main():
     print(f"   unresolved: {len(ref_bad) + len(loc_bad)}")
     print(f"   {rolled} term(s) matched only after LLT->PT roll-up "
           f"(these would be false discrepancies under exact matching)")
+    for w in warnings:
+        print(f"\n   WARNING: {w}.")
+        print("            Differences arising from that gap are not real "
+              "discrepancies; check the 'Found in' column before acting on them.")
 
 
 if __name__ == "__main__":

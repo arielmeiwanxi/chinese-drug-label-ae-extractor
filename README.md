@@ -35,8 +35,9 @@ build_meddra_index.py    UMLS MRCONSO/MRSTY -> MedDRA term index
         |
         +--> extract_smpc_ae.py     reference label PDF -> AE list   [no LLM]
         |
-        +--> extract_sections.py    local label PDF -> section text
-        |    llm_extract.py         section text -> AE list          [LLM]
+        +--> extract_lpi_ae.py      local label PDF -> AE list       [no LLM]
+        |    extract_sections.py    local label PDF -> section text
+        |    llm_extract.py         narrative sections -> AE list     [LLM]
         |    verify_and_report.py   verify each term against MedDRA
         |
         v
@@ -92,6 +93,13 @@ score for a wrong answer to hide behind. Full write-up and the code are kept in
 | Matched only after LLT to PT roll-up | 2 |
 | Unresolved (not in MedDRA) | 1 |
 
+Extraction of the Chinese label's tabulated list was measured against the
+table itself, which is an unambiguous 21-row ground truth: **21 of 21 found,
+no misses and no false positives.** That measures the structural parsing,
+including splitting the compound injection-site row into its six concepts. It
+does not measure the Chinese-to-English mapping, which runs off a dictionary
+seeded from those same terms and so cannot be scored against them.
+
 The Chinese-only set clusters meaningfully: four cardiovascular thromboembolic
 terms with no counterpart anywhere in the EU SmPC, four severe
 eosinophil-related events, three COPD-specific injection site reactions, and
@@ -144,10 +152,14 @@ checked against.
   qualified review before any real-world use. Medical review is deliberately
   unchanged by this project; what changes is that the reviewer receives a
   traceable diff rather than a hand-compiled list.
-- **The Chinese narrative extraction is not yet automated.** Tabulated sections
-  run end to end. The free-text sections of the Chinese label were read
-  manually for the reference set; `llm_extract.py` is written for this but has
-  not been run end to end, as it needs an API key.
+- **The Chinese narrative extraction is not yet automated.** Both tabulated
+  lists run end to end with no LLM. The free-text sections of the Chinese label
+  were read manually for the reference set; `llm_extract.py` is written for
+  this but has not been run end to end, as it needs an API key. Because of
+  that gap, comparing the two automated sides produces differences that are
+  artefacts of uneven coverage rather than real discrepancies, so
+  `compare_labels.py` detects the mismatch and says so instead of reporting
+  the counts as findings.
 - Deterministic lookup catches "not in MedDRA" but not "in MedDRA, but not
   quite the right nuance" (see the `面部皮疹` and `心血管死亡` rows in the
   reference extraction, both flagged medium confidence for that reason).
