@@ -1,165 +1,155 @@
-# Chinese Drug Label AE Extractor
+# Drug Label Adverse Reaction Reconciliation
 
-Extracts adverse reaction (AE) mentions from a Chinese drug package insert
-(说明书 / LPI) and codes each one against the real UMLS/MedDRA terminology —
-with CUIs, not free text — so the output is usable for pharmacovigilance
-data work instead of just a list of strings.
+Compares the adverse reactions listed in two versions of a drug's labelling and
+reports where they diverge, with every term normalised to a MedDRA Preferred
+Term so that the comparison is meaningful rather than a string diff.
 
-Demonstrated on Sanofi's Dupixent (dupilumab) Chinese label, but nothing in
-the pipeline is Dupixent-specific — point it at any Chinese drug label PDF.
+Demonstrated on dupilumab (Dupixent): the EU Summary of Product Characteristics
+against the Chinese NMPA-registered label. Both are public documents.
 
-## Why this exists
+## Why
 
-A drug label's adverse reactions aren't confined to the "不良反应" section —
-they're scattered through warnings, precautions, and population-specific
-subsections too (see [LPI/dupixent_ae_reference.csv](LPI/dupixent_ae_reference.csv):
-16 of the 37 verified terms came from outside the main AE table). Finding
-them by hand doesn't scale past one document, and running them past a
-translation model to match against English-language UMLS data turned out to
-have a nasty failure mode — see below.
+In pharmacovigilance, a drug's local label has to be kept consistent with its
+global reference document, and every version update means checking again. The
+comparison itself is easy. Getting the two lists into a comparable state is not:
 
-## Pipeline
+- **The two documents sit at different granularity.** Local labels list
+  reactions at Lowest Level Term (LLT) level, reference documents at Preferred
+  Term (PT) level. Historically this meant opening the MedDRA dictionary and
+  looking each term up by hand to find its roll-up.
+- **String matching does not work.** "Corneal ulcer" and "Ulcerative keratitis"
+  are the same concept written two ways. Exact matching reports them as a
+  discrepancy; on the test pair that is 2 of 21 table terms, a 9.5% false
+  positive rate on that section alone.
+- **Reactions are not confined to the adverse reactions section.** 16 of the 37
+  terms in the Chinese label sit outside its main AE table, in warnings and
+  population-specific subsections.
+- **The reference document may be confidential**, which rules out sending it to
+  an external AI service.
+
+## How it works
 
 ```
-extract_sections.py    PDF -> clean, section-tagged text
-        |               (layout-aware: distinguishes real line breaks from
-        |                mid-word PDF page-width wrapping — see the module
-        |                docstring for why this matters)
+build_meddra_index.py    UMLS MRCONSO/MRSTY -> MedDRA term index
+                         (111,384 terms; 27,163 PT / 81,143 LLT)
+        |
+        +--> extract_smpc_ae.py     reference label PDF -> AE list   [no LLM]
+        |
+        +--> extract_sections.py    local label PDF -> section text
+        |    llm_extract.py         section text -> AE list          [LLM]
+        |    verify_and_report.py   verify each term against MedDRA
+        |
         v
-llm_extract.py          LLM reads each section in context, proposes AE
-        |                mentions + a standard English MedDRA-style term
-        |                for each (needs your own API key — see Setup)
-        v
-build_umls_index.py     Parses your local UMLS MRCONSO.RRF/MRSTY.RRF into
-        |                a lookup table (run once, cached)
-        v
-verify_and_report.py    Every LLM-proposed term is checked against the real
-                         UMLS data by EXACT STRING LOOKUP — not a similarity
-                         score (see "The finding" below for why). A term
-                         either matches a real MedDRA string or it's flagged
-                         for manual coding, with embedding-based suggestions
-                         attached only as an advisory hint for the reviewer.
+compare_labels.py        both lists -> reconciled diff at PT level
 ```
 
-A small human-reviewed dictionary (`LPI/ae_term_dictionary.csv`) sits in
-front of the LLM call: once a term has been seen and confirmed, it's an
-instant free lookup on every future run, so the LLM is only ever spent on
-genuinely new mentions.
+**The LLT to PT roll-up is a lookup, not a matching problem.** On a MedDRA LLT
+row, UMLS holds the code of that term's Preferred Term in the SDUI column. So
+the roll-up every term needs is a dictionary lookup: 81,143 of 81,143 LLTs
+resolve, deterministically, offline. This is also what makes synonyms free.
+"Fever" is an LLT whose PT is "Pyrexia"; terms that look nothing alike
+normalise to the same concept without any fuzzy matching.
 
-## The finding that shaped this design
+**The reference side needs no LLM.** Its terms are already English and already
+MedDRA-shaped, so the whole document can be handled by dictionary lookup
+against the index. It runs offline at zero cost, which is what makes the
+approach usable when the reference document cannot leave the machine.
 
-The first version of this pipeline translated Chinese candidate phrases with
-a local NMT model (`Helsinki-NLP/opus-mt-zh-en`) and matched the English
-output against UMLS by cosine similarity — the standard "vectorize and
-threshold" recipe. Calibrating it against the real UMLS/MedDRA data (not a
-toy example — the actual 60k-term MedDRA subset) surfaced a specific,
-reproducible problem:
+## The negative result
 
-| Chinese term | Mistranslation | Matched to (real MedDRA) | Cosine score |
+The first version of this project translated the Chinese terms into English
+with a local NMT model and matched them against MedDRA by embedding
+similarity, accepting anything above a confidence threshold. Calibrated against
+59,479 real MedDRA terms, it failed in a way no threshold can fix:
+
+| Chinese term | Mistranslated as | Matched to | Cosine |
 |---|---|---|---|
 | 结膜炎 (conjunctivitis) | "Meningitis" | **Meningitis** | 1.000 |
 | 角膜炎 (keratitis) | "Cornelitis" (not a word) | **Cornelia de Lange syndrome** | 0.931 |
-| 心血管血栓栓塞事件 | "...throttle embolism" | **Heart throbbing** | 0.920 |
+| 心血管血栓栓塞 (cardiovascular thromboembolism) | "...throttle embolism" | **Heart throbbing** | 0.920 |
 
-All three score above where a normal "high confidence, auto-accept"
-threshold would sit (e.g. 0.85). The embedding model measures *"does this
-English text resemble a MedDRA term"* — not *"was this translated
-correctly"* — so once a translation error produces plausible-sounding
-English, the resulting mismatch is invisible to the score. A threshold
-can't fix this: the score distribution for wrong matches overlaps almost
-entirely with the distribution for correct ones. Full writeup and the
-scripts themselves are kept in
+All three score above where a "high confidence, auto-accept" line would sit.
+The score measures whether the English text resembles a MedDRA term, not
+whether the translation was correct, so once a mistranslation produces
+plausible English the error is invisible to it. A larger translation model
+(NLLB-200) was no better.
+
+The fix was not a better model. It was replacing generative translation plus
+similarity scoring with **deterministic lookup**: a term either resolves to a
+real MedDRA concept or it is flagged for manual coding, with no continuous
+score for a wrong answer to hide behind. Full write-up and the code are kept in
 [`scripts/legacy_nmt_embedding_approach/`](scripts/legacy_nmt_embedding_approach/README.md).
 
-The fix wasn't a better translation model (a larger one, NLLB-200, was
-tested and was no better — see the same writeup). It was replacing
-**generative translation + similarity scoring** with **LLM term proposal +
-deterministic lookup**: an LLM reading the source sentence in context
-proposes a term, and that term is either an exact (or spelling-normalized)
-match in the real MedDRA data or it isn't — there's no continuous score for
-a wrong answer to hide behind.
+## Results on the test pair
+
+`compare_labels.py` on the EU SmPC vs the Chinese label:
+
+| | Count |
+|---|---|
+| Present in both | 24 |
+| Chinese label only | 13 |
+| EU document only | 3 |
+| Matched only after LLT to PT roll-up | 2 |
+| Unresolved (not in MedDRA) | 1 |
+
+The Chinese-only set clusters meaningfully: four cardiovascular thromboembolic
+terms with no counterpart anywhere in the EU SmPC, four severe
+eosinophil-related events, three COPD-specific injection site reactions, and
+two terms from a China-specific clinical study.
+
+Two coding-quality findings surfaced in the published EMA document itself:
+`Facial rash` is coded at LLT level where a PT was expected (the correct PT,
+`Rash`, is returned with the flag), and `Serum sickness reaction` is not a
+valid MedDRA term.
+
+Free-text extraction precision went from 17 false positives to 1 across four
+fixes: claiming every occurrence of a matched term rather than only the first,
+excluding the drug's own indications (read from the document's Section 4.1
+rather than hardcoded), filtering by UMLS semantic type, and treating the
+narrative subheadings as a separate higher-confidence tier.
 
 ## Setup
 
 1. **UMLS account** (free): register at the
    [NLM UTS](https://www.nlm.nih.gov/research/umls/index.html), download the
-   Metathesaurus, and place `MRCONSO.RRF` (required) and `MRSTY.RRF`
-   (recommended — used to filter to AE-relevant semantic types) under
-   `umls/`. These files are large (MRCONSO.RRF is ~2GB) and licensed —
-   `.gitignore` already excludes them, don't commit them.
-
-2. **LLM API key** for whichever provider you want (`scripts/llm_extract.py`
-   supports Anthropic and OpenAI out of the box; anything with an
-   OpenAI-compatible endpoint is a small change to `call_openai`):
-   ```bash
-   cp .env.example .env
-   # fill in LLM_PROVIDER and the matching API key
-   ```
-
-3. **Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+   Metathesaurus, and place `MRCONSO.RRF` and `MRSTY.RRF` under `umls/`. These
+   are large and licensed, and are gitignored. So is everything derived from
+   them, including the generated index.
+2. `pip install -r requirements.txt`
+3. Only for the local-label narrative extraction: `cp .env.example .env` and
+   add an API key.
 
 ## Usage
 
 ```bash
-python scripts/run_pipeline.py
+python scripts/build_meddra_index.py umls output/meddra_index.parquet
+python scripts/extract_smpc_ae.py SmPC/your-smpc.pdf output/meddra_index.parquet output/smpc_ae.csv
+python scripts/compare_labels.py output/smpc_ae.csv LPI/local_ae.csv output/meddra_index.parquet output/label_diff.csv
 ```
 
-Or run each stage individually (useful if you want to inspect intermediate
-output, or you already have a cached `umls_meddra_index.parquet` and want to
-skip rebuilding it):
-
-```bash
-python scripts/extract_sections.py LPI/your-label.pdf output/sections.json
-python scripts/llm_extract.py output/sections.json output/llm_candidates.json
-python scripts/build_umls_index.py umls output/umls_meddra_index.parquet
-python scripts/verify_and_report.py output/llm_candidates.json output/umls_meddra_index.parquet output/ae_report.csv
-```
-
-Final report columns: Section · Pages · Chinese Term · Context (source
-sentence, for provenance — kept in Chinese, since it's a verbatim quote used
-to trace a result back to the source PDF) · Standard English Term · CUI ·
-SAB · TTY · Status (dictionary hit / UMLS-verified / needs manual coding) ·
-LLM Confidence · Note · Suggested Alternatives (advisory nearest-neighbor
-suggestions, unverified terms only).
+`compare_labels.py` auto-detects column names, so either side can come from an
+extractor or from a hand-curated list.
 
 ## Reference extraction
 
-[LPI/dupixent_ae_reference.csv](LPI/dupixent_ae_reference.csv) — 37 AE terms
-from Dupixent's Chinese label (300mg PFS formulation, 2025-07-11 revision),
-each carrying a MedDRA CUI looked up in the real UMLS data. 21 come from the
-label's own AE table; the other 16 are scattered through "特定不良反应描述"
-and "注意事项" subsections — e.g. *eczema herpeticum* (疱疹性湿疹),
-*eosinophilic granulomatosis with polyangiitis* (嗜酸性肉芽肿性多血管炎),
-and the two COPD-specific injection-site terms that don't appear in the main
-table at all.
-
-**This is a hand-verified reference set, not pipeline output** — it was read
-and coded manually, and its columns differ from what
-`verify_and_report.py` produces. It serves two purposes: it seeds
-`LPI/ae_term_dictionary.csv` (so those terms are free dictionary hits on
-every future run), and it's the ground truth to check a pipeline run against.
-The pipeline writes to `output/`, which is gitignored — so running it can
-never overwrite the reviewed data.
+[LPI/dupixent_ae_reference.csv](LPI/dupixent_ae_reference.csv) holds 37 AE terms
+read out of the Chinese label by hand, each with a CUI verified against the real
+UMLS data. It is **not pipeline output**: it seeds the dictionary so those terms
+are free lookups on later runs, and it is the ground truth a pipeline run is
+checked against.
 
 ## Limitations
 
-- **Not a regulatory or clinical tool.** This is a research/portfolio
-  project. Output needs pharmacovigilance-qualified human review before any
-  real-world use — the "Status" and "LLM Confidence" columns are there to
-  make that review fast, not to replace it.
-- LLM term proposals are only as good as the model reading them; the
-  deterministic UMLS check catches "doesn't exist in MedDRA" but not "exists
-  in MedDRA, but isn't quite the right nuance" (see the `面部皮疹` → generic
-  `Rash` and `心血管死亡` → `Cardiac death` rows in the reference extraction —
-  both flagged medium-confidence for exactly this reason).
-- **The LLM extraction stage has not been run end-to-end yet.**
-  `extract_sections.py`, `build_umls_index.py`, and `verify_and_report.py`
-  are exercised and working; `llm_extract.py` is written but untested, as it
-  needs an API key.
-- Tested on one Chinese-language biologic label. Labels with heavier tabular
-  layouts, non-standard section headers, or scanned/non-text-layer PDFs will
-  need adjustments to `extract_sections.py`'s heading-detection regex or an
-  OCR pre-pass.
+- **Not a regulatory or clinical tool.** Output needs pharmacovigilance
+  qualified review before any real-world use. Medical review is deliberately
+  unchanged by this project; what changes is that the reviewer receives a
+  traceable diff rather than a hand-compiled list.
+- **The Chinese narrative extraction is not yet automated.** Tabulated sections
+  run end to end. The free-text sections of the Chinese label were read
+  manually for the reference set; `llm_extract.py` is written for this but has
+  not been run end to end, as it needs an API key.
+- Deterministic lookup catches "not in MedDRA" but not "in MedDRA, but not
+  quite the right nuance" (see the `面部皮疹` and `心血管死亡` rows in the
+  reference extraction, both flagged medium confidence for that reason).
+- Tested on one document pair. Labels with heavier tabular layouts, different
+  section headings, or scanned PDFs will need adjustments to the extractors.

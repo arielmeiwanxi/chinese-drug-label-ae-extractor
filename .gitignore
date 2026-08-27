@@ -16,3 +16,7 @@ output/*
 __pycache__/
 *.pyc
 .DS_Store
+
+# The EMA SmPC is a public document but large; not worth versioning.
+SmPC/*.pdf
+SmPC/*.txt
